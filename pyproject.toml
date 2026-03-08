@@ -1,35 +1,57 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant-risk-fraud-model"
 version = "0.1.0"
-description = "Production-grade risk and fraud scoring engine"
+description = "A quantitative risk and fraud scoring engine with statistical models, gradient boosting, calibration, governance checks, and a FastAPI scoring service."
+authors = [
+    { name = "Eric Galante" }
+]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
+
 dependencies = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "pandas>=2.0.0",
-    "numpy>=1.24.0",
-    "scikit-learn>=1.3.0",
-    "xgboost>=2.0.0",
-    "shap>=0.44.0",
-    "matplotlib>=3.7.0",
-    "seaborn>=0.12.0",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "xgboost",
+    "lightgbm",
+    "statsmodels",
+    "matplotlib",
+    "seaborn",
+    "shap",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "joblib"
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
+    "pytest",
+    "pytest-cov",
+    "black",
+    "ruff",
+    "mypy"
 ]
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+where = ["src"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_unused_configs = true
+warn_return_any = true
+strict_optional = true
