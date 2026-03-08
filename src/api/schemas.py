@@ -11,6 +11,13 @@ from pydantic import BaseModel, Field
 from src.data.schema import CORE_FEATURES
 
 
+class TopContributor(BaseModel):
+    """Single top contributing feature for explainability."""
+
+    feature: str = Field(..., description="Feature name")
+    contribution: float = Field(..., description="Contribution to score (positive = increases risk)")
+
+
 class ScoreRequest(BaseModel):
     """Input features for a single score request.
 
@@ -64,8 +71,27 @@ class ScoreResponse(BaseModel):
     fraud_flag: int = Field(..., ge=0, le=1, description="Binary decision at 0.5 threshold")
     expected_loss: Optional[float] = Field(None, description="PD * LGD * EAD when LGD/EAD provided")
     shap_values: Optional[dict[str, float]] = Field(None, description="Per-feature contribution to score")
+    top_contributors: Optional[list[TopContributor]] = Field(
+        None,
+        description="Top contributing features by |contribution| (when include_shap=true)",
+    )
 
     model_config = {"extra": "forbid"}
+
+
+def top_contributors_from_shap(
+    shap_values: dict[str, float],
+    top_n: int = 5,
+) -> list[TopContributor]:
+    """Return top N features by absolute contribution (descending)."""
+    if not shap_values:
+        return []
+    sorted_features = sorted(
+        shap_values.items(),
+        key=lambda x: abs(x[1]),
+        reverse=True,
+    )[:top_n]
+    return [TopContributor(feature=k, contribution=round(v, 6)) for k, v in sorted_features]
 
 
 def probability_to_risk_tier(probability: float) -> str:

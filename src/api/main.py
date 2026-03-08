@@ -23,6 +23,7 @@ from src.api.schemas import (
     probability_to_risk_tier,
     probability_to_risk_tier_letter,
     probability_to_risk_tier_numeric,
+    top_contributors_from_shap,
 )
 from src.config import DEFAULT_MODEL_PATH, GBM_MODEL_PATH
 from src.explainability.shap_explainer import get_feature_contributions
@@ -77,8 +78,10 @@ def _build_response(
             probability * request.loss_given_default * request.exposure_at_default, 6
         )
     shap_values = None
+    top_contributors = None
     if include_shap:
         shap_values = get_feature_contributions(artifact, feature_row)
+        top_contributors = top_contributors_from_shap(shap_values, top_n=5)
     return ScoreResponse(
         probability=round(probability, 6),
         risk_tier=risk_tier,
@@ -87,6 +90,7 @@ def _build_response(
         fraud_flag=fraud_flag,
         expected_loss=expected_loss,
         shap_values=shap_values,
+        top_contributors=top_contributors,
     )
 
 
