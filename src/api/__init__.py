@@ -1,0 +1,1 @@
+"""FastAPI scoring service."""
