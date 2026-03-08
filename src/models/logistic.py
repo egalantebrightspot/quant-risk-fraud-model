@@ -1,9 +1,13 @@
 """Logistic regression risk model."""
 
+from __future__ import annotations
+
+import joblib
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from sklearn.linear_model import LogisticRegression
-from typing import Optional
+from typing import Optional, Union
 
 from src.config import (
     RANDOM_STATE,
@@ -72,3 +76,14 @@ class LogisticRiskModel:
         if self.feature_names_in_ is not None:
             return pd.Series(coef, index=self.feature_names_in_)
         return pd.Series(coef, index=[f"X{i}" for i in range(len(coef))])
+
+    def save(self, path: Union[str, Path]) -> None:
+        """Persist the model to disk with joblib."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self, path)
+
+    @classmethod
+    def load(cls, path: Union[str, Path]) -> "LogisticRiskModel":
+        """Load a persisted model from disk."""
+        return joblib.load(Path(path))

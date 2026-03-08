@@ -1,0 +1,24 @@
+# Artifacts (trained models, explainers; keep directory via .gitkeep)
+artifacts/*.joblib
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build / dist
+*.egg-info/
+dist/
+build/

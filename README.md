@@ -38,6 +38,11 @@ The goal is to demonstrate quantitative modeling depth, governance, and producti
 ```text
 quant-risk-fraud-model/
 │
+├── artifacts/          # Trained models, calibration, SHAP explainers (see artifacts/README.md)
+│   ├── logistic_model.joblib
+│   ├── baseline_logistic.joblib
+│   └── ...
+├── data/               # Training data (e.g. training_data.csv)
 ├── src/
 │   ├── data/
 │   │   ├── loaders.py

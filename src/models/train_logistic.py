@@ -16,13 +16,17 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Union, cast
 
 import joblib
+import pandas as pd
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
 
 from src.config import (
     ARTIFACTS_DIR,
     DEFAULT_MODEL_PATH,
+    LOGISTIC_MODEL_PATH,
     RANDOM_STATE,
     TEST_SIZE,
     VALIDATION_SIZE,
@@ -38,6 +42,37 @@ from src.evaluation.metrics import evaluation_summary
 
 
 DEFAULT_DATA_PATH = DATA_DIR / "training_data.csv"
+
+
+def train_logistic_model(
+    data_path: Union[str, Path] = DEFAULT_DATA_PATH,
+    model_path: Union[str, Path] = LOGISTIC_MODEL_PATH,
+    test_size: float = 0.2,
+    random_state: int = RANDOM_STATE,
+) -> float:
+    """Simple training loop: load CSV, split, fit, evaluate AUC, save model.
+
+    Uses fraud_flag as target. No feature scaling or calibration; for the full
+    pipeline use run_training() instead.
+    """
+    data_path = Path(data_path)
+    model_path = Path(model_path)
+    df = pd.read_csv(data_path)
+    X = df.drop(TARGET_FRAUD, axis=1)
+    y = df[TARGET_FRAUD]
+    X_train, X_test, y_train, y_test = cast(
+        tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series],
+        train_test_split(
+            X, y, test_size=test_size, random_state=random_state, stratify=y
+        ),
+    )
+    model = LogisticRiskModel(random_state=random_state)
+    model.fit(X_train, y_train)
+    probs = model.predict_proba(X_test)
+    auc = roc_auc_score(y_test, probs[:, 1])
+    print(f"AUC: {auc:.4f}")
+    model.save(model_path)
+    return float(auc)
 
 
 def run_training(
@@ -152,7 +187,21 @@ def main() -> None:
         default=CALIBRATION_METHOD,
         help="Calibration method (default: isotonic)",
     )
+    parser.add_argument(
+        "--simple",
+        action="store_true",
+        help="Use simple train_logistic_model() flow (no scaling/calibration, model.save).",
+    )
     args = parser.parse_args()
+
+    if args.simple:
+        train_logistic_model(
+            data_path=args.data,
+            model_path=LOGISTIC_MODEL_PATH,
+            test_size=0.2,
+            random_state=RANDOM_STATE,
+        )
+        return
 
     result = run_training(
         data_path=args.data,
