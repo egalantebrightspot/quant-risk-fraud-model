@@ -13,6 +13,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.models.logistic import LogisticRiskModel
+from src.models.train_logistic import run_training
+from src.data.loaders import generate_and_save
+from src.data.schema import TARGET_FRAUD
 
 
 def test_logistic_risk_model_fit_predict():
@@ -48,3 +51,26 @@ def test_logistic_risk_model_coefficients():
     assert isinstance(coef, pd.Series)
     assert list(coef.index) == ["a", "b", "c"]
     assert len(coef) == 3
+
+
+def test_train_logistic_run_training(tmp_path):
+    """run_training loads CSV, trains, evaluates, saves artifact and metrics."""
+    data_path = tmp_path / "train.csv"
+    generate_and_save(path=data_path, n=500, fraud_rate=0.08, random_state=42)
+    out_path = tmp_path / "model.joblib"
+    result = run_training(
+        data_path=data_path,
+        target_column=TARGET_FRAUD,
+        output_path=out_path,
+        test_size=0.25,
+        validation_size=0.2,
+        random_state=42,
+    )
+    assert "summary_uncal" in result
+    assert "summary_cal" in result
+    assert "artifact_path" in result
+    assert "metrics_path" in result
+    assert result["artifact_path"].exists()
+    assert result["metrics_path"].exists()
+    assert "auc" in result["summary_uncal"]
+    assert "ks" in result["summary_uncal"]

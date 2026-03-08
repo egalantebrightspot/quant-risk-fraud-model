@@ -19,7 +19,7 @@ from src.data.schema import (
     get_feature_names,
     get_target_name,
 )
-from src.data.loaders import generate_synthetic_risk_data
+from src.data.loaders import generate_synthetic_risk_data, generate_and_save
 from src.data.synthetic_generator import SyntheticRiskDataGenerator
 
 
@@ -95,3 +95,13 @@ def test_synthetic_risk_data_generator_generate_X_y():
     assert list(X.columns) == CORE_FEATURES
     assert y.name == TARGET_FRAUD
     assert len(y) == 300
+
+
+def test_generate_and_save(tmp_path):
+    path = tmp_path / "training_data.csv"
+    df = generate_and_save(path=str(path), n=200, fraud_rate=0.04, random_state=1)
+    assert df.shape == (200, 11)
+    assert path.exists()
+    loaded = pd.read_csv(path)
+    assert list(loaded.columns) == list(df.columns)
+    assert len(loaded) == 200

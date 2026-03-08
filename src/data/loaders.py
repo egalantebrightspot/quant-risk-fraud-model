@@ -4,8 +4,9 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from sklearn.datasets import make_classification
-from typing import Tuple, Optional, cast
+from typing import Tuple, Optional, cast, Union
 
+from src.config import DATA_DIR, RANDOM_STATE
 from src.data.schema import (
     CORE_FEATURES,
     DEFAULT_TARGET,
@@ -13,6 +14,7 @@ from src.data.schema import (
     get_feature_names,
     get_target_name,
 )
+from src.data.synthetic_generator import SyntheticRiskDataGenerator
 
 
 def load_csv(
@@ -230,3 +232,32 @@ def generate_synthetic_risk_data(
         })
 
     return (X_df, y_series, aux_df)
+
+
+def generate_and_save(
+    path: Optional[Union[str, Path]] = None,
+    n: int = 50_000,
+    fraud_rate: float = 0.03,
+    random_state: int = RANDOM_STATE,
+) -> pd.DataFrame:
+    """Generate synthetic risk data and save to CSV.
+
+    Args:
+        path: Output path for CSV. Defaults to data/training_data.csv under project root.
+        n: Number of samples to generate.
+        fraud_rate: Target fraud rate (e.g. 0.03 for 3%).
+        random_state: Random seed for reproducibility.
+
+    Returns:
+        The generated DataFrame (same as would be read from the CSV).
+    """
+    out_path = Path(path) if path is not None else DATA_DIR / "training_data.csv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    gen = SyntheticRiskDataGenerator(
+        n_samples=n,
+        fraud_rate=fraud_rate,
+        random_state=random_state,
+    )
+    df = gen.generate()
+    df.to_csv(out_path, index=False)
+    return df
