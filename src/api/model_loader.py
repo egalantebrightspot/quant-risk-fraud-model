@@ -1,36 +1,40 @@
 """Load trained model artifact from artifacts/ for scoring."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Optional
 
 import joblib
 import pandas as pd
 
-from src.config import DEFAULT_MODEL_PATH
+from src.config import DEFAULT_MODEL_PATH, GBM_MODEL_PATH
 from src.data.schema import CORE_FEATURES
 from src.models.calibration import apply_calibration
 
 
-def load_scoring_artifact(path: Path | None = None) -> dict[str, Any]:
-    """Load the baseline logistic artifact (model, scaler, calibrator).
+def load_scoring_artifact(
+    path: Optional[Path] = None,
+    model_type: Literal["logistic", "gbm"] = "logistic",
+) -> dict[str, Any]:
+    """Load a scoring artifact (logistic or GBM).
 
-    Supports two formats:
+    Supports two formats for logistic:
     - Full pipeline: joblib dict with model, scaler, calibrator, feature_names_in.
-    - Simple model: joblib dump of LogisticRiskModel only (no scaling/calibration).
+    - Simple model: joblib dump of LogisticRiskModel only.
+
+    For GBM, expects joblib of GBMRiskModel or dict with "model" key.
 
     Returns a dict with keys: model, scaler (optional), calibrator (optional),
     feature_names_in. Raises FileNotFoundError if the artifact is missing.
     """
-    path = path or DEFAULT_MODEL_PATH
+    path = path or (DEFAULT_MODEL_PATH if model_type == "logistic" else GBM_MODEL_PATH)
     if not path.exists():
         raise FileNotFoundError(
-            f"Model artifact not found at {path}. Run training first, e.g.: "
-            "python -m src.models.train_logistic"
+            f"Model artifact not found at {path}. Run training first."
         )
     obj = joblib.load(path)
     if isinstance(obj, dict):
         return obj
-    # Simple artifact: LogisticRiskModel only
+    # Simple artifact: LogisticRiskModel or GBMRiskModel
     return {
         "model": obj,
         "scaler": None,
