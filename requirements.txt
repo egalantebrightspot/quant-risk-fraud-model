@@ -23,3 +23,7 @@ uvicorn
 # Utilities
 pydantic
 joblib
+
+# Testing (for IDE resolution and CI)
+pytest
+pytest-cov
