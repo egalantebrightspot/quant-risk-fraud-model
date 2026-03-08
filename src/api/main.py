@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 
 from src.api.model_loader import load_scoring_artifact, score_one
 from src.api.schemas import (
@@ -108,9 +108,49 @@ def health() -> dict[str, str]:
     }
 
 
+# Sample payloads for Swagger UI
+_EXAMPLE_LOW_RISK = {
+    "age": 45,
+    "income": 85,
+    "utilization": 0.15,
+    "num_trades": 6,
+    "delinq_30d": 0,
+    "credit_history_length": 15,
+    "transaction_amount": 75,
+    "merchant_risk_score": 1,
+    "device_trust_score": 0.9,
+    "velocity_score": 0.8,
+}
+_EXAMPLE_HIGH_RISK = {
+    "age": 28,
+    "income": 35,
+    "utilization": 0.85,
+    "num_trades": 12,
+    "delinq_30d": 1,
+    "credit_history_length": 3,
+    "transaction_amount": 450,
+    "merchant_risk_score": 4,
+    "device_trust_score": 0.2,
+    "velocity_score": 8.0,
+}
+_EXAMPLE_WITH_LGD_EAD = {
+    **_EXAMPLE_LOW_RISK,
+    "loss_given_default": 0.4,
+    "exposure_at_default": 100.0,
+}
+_EXAMPLE_BATCH = [_EXAMPLE_LOW_RISK, _EXAMPLE_HIGH_RISK]
+
+
 @app.post("/score", response_model=ScoreResponse)
 def score(
-    request: ScoreRequest,
+    request: ScoreRequest = Body(
+        ...,
+        examples={
+            "low_risk": {"summary": "Low risk", "value": _EXAMPLE_LOW_RISK},
+            "high_risk": {"summary": "High risk", "value": _EXAMPLE_HIGH_RISK},
+            "with_expected_loss": {"summary": "With LGD/EAD (expected loss)", "value": _EXAMPLE_WITH_LGD_EAD},
+        },
+    ),
     model: str = Query("logistic", description="Model to use: logistic or gbm"),
     include_shap: bool = Query(False, description="Include SHAP-based feature contributions"),
 ) -> ScoreResponse:
@@ -136,7 +176,12 @@ def score(
 
 @app.post("/score/batch", response_model=list[ScoreResponse])
 def score_batch(
-    requests: list[ScoreRequest],
+    requests: list[ScoreRequest] = Body(
+        ...,
+        examples={
+            "low_and_high": {"summary": "Low risk + High risk", "value": _EXAMPLE_BATCH},
+        },
+    ),
     model: str = Query("logistic", description="Model to use: logistic or gbm"),
     include_shap: bool = Query(False, description="Include SHAP-based feature contributions"),
 ) -> list[ScoreResponse]:

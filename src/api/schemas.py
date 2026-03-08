@@ -31,7 +31,23 @@ class ScoreRequest(BaseModel):
     loss_given_default: Optional[float] = Field(None, ge=0, le=1, description="LGD for expected loss (optional)")
     exposure_at_default: Optional[float] = Field(None, ge=0, description="EAD for expected loss (optional)")
 
-    model_config = {"extra": "forbid"}
+    model_config = {
+        "extra": "forbid",
+        "json_schema_extra": {
+            "example": {
+                "age": 45,
+                "income": 85,
+                "utilization": 0.15,
+                "num_trades": 6,
+                "delinq_30d": 0,
+                "credit_history_length": 15,
+                "transaction_amount": 75,
+                "merchant_risk_score": 1,
+                "device_trust_score": 0.9,
+                "velocity_score": 0.8,
+            }
+        },
+    }
 
     def to_feature_row(self) -> dict[str, float]:
         """Return a dict of feature name -> value in schema order for scoring (excludes LGD/EAD)."""
