@@ -19,6 +19,7 @@ shap
 # API layer
 fastapi
 uvicorn
+httpx
 
 # Utilities
 pydantic
