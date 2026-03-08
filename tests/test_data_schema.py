@@ -20,6 +20,7 @@ from src.data.schema import (
     get_target_name,
 )
 from src.data.loaders import generate_synthetic_risk_data
+from src.data.synthetic_generator import SyntheticRiskDataGenerator
 
 
 def test_schema_feature_names():
@@ -76,3 +77,21 @@ def test_generate_synthetic_risk_data_positive_rate():
     )
     rate = y.mean()
     assert 0.02 <= rate <= 0.08  # rough band around 4%
+
+
+def test_synthetic_risk_data_generator_generate():
+    gen = SyntheticRiskDataGenerator(n_samples=500, fraud_rate=0.05, random_state=42)
+    df = gen.generate()
+    assert df.shape == (500, 11)
+    assert list(df.columns) == CORE_FEATURES + [TARGET_FRAUD]
+    assert df[TARGET_FRAUD].isin([0, 1]).all()
+    assert 0.02 <= df[TARGET_FRAUD].mean() <= 0.12  # rough band around 5%
+
+
+def test_synthetic_risk_data_generator_generate_X_y():
+    gen = SyntheticRiskDataGenerator(n_samples=300, fraud_rate=0.03, random_state=0)
+    X, y = gen.generate_X_y()
+    assert X.shape == (300, 10)
+    assert list(X.columns) == CORE_FEATURES
+    assert y.name == TARGET_FRAUD
+    assert len(y) == 300

@@ -36,6 +36,7 @@ from src.config import (
     CALIBRATION_METHOD,
 )
 from src.data.loaders import load_csv, load_synthetic, generate_synthetic_risk_data
+from src.data.synthetic_generator import SyntheticRiskDataGenerator
 from src.data.preprocessing import train_test_split_data, scale_features
 from src.models.logistic import LogisticRiskModel
 from src.models.calibration import fit_calibrator, apply_calibration
@@ -86,12 +87,13 @@ def main() -> None:
         X, y = load_synthetic(random_state=RANDOM_STATE)
         print("Using legacy synthetic data (10k samples, 20 features)")
     else:
-        X, y, _ = generate_synthetic_risk_data(
+        gen = SyntheticRiskDataGenerator(
             n_samples=10_000,
-            positive_fraction=0.03,
+            fraud_rate=0.03,
             random_state=RANDOM_STATE,
         )
-        print("Using schema-based synthetic risk data (10k samples, fraud_flag ~3%)")
+        X, y = gen.generate_X_y()
+        print("Using SyntheticRiskDataGenerator (10k samples, fraud_rate=3%)")
 
     # Train / test split
     X_train, X_test, y_train, y_test = train_test_split_data(
@@ -107,8 +109,7 @@ def main() -> None:
 
     # Scale features (fit on train only)
     X_tr_s, X_cal_s, scaler = scale_features(X_tr, X_cal)
-    X_test_s = X_test.copy()
-    X_test_s.loc[:, :] = scaler.transform(X_test)
+    _, X_test_s, _ = scale_features(X_test, X_test, fit_on=X_tr)
 
     # Train baseline model
     model = LogisticRiskModel()
