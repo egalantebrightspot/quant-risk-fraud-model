@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from src.api.audit import (
     feature_drift_indicators,
@@ -29,6 +29,7 @@ from src.api.audit import (
     log_score_audit,
     log_error,
 )
+from src.api.metrics import get_content_type, get_metrics, record_request, record_score
 from src.api.model_loader import load_scoring_artifact, score_one
 from src.api.schemas import (
     DecisionResponse,
@@ -90,12 +91,19 @@ async def audit_middleware(request: Request, call_next):
     )
     response = await call_next(request)
     latency_ms = (time.perf_counter() - request.state.start_time) * 1000
+    latency_seconds = latency_ms / 1000.0
     log_response(
         request_id=request_id,
         method=request.method,
         path=request.url.path,
         status_code=response.status_code,
         latency_ms=latency_ms,
+    )
+    record_request(
+        path=request.url.path,
+        method=request.method,
+        status_code=response.status_code,
+        latency_seconds=latency_seconds,
     )
     return response
 
@@ -248,6 +256,18 @@ def health() -> dict[str, str]:
     }
 
 
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    """Prometheus metrics for request count, latency, error rate, score distribution.
+
+    Scrape from Prometheus; use in Grafana for drift and model degradation detection.
+    """
+    return Response(
+        content=get_metrics(),
+        media_type=get_content_type(),
+    )
+
+
 @app.get("/model_info", response_model=ModelInfoResponse)
 def model_info(
     model: str = Query("logistic", description="Model to describe: logistic or gbm"),
@@ -349,6 +369,7 @@ def score(
         latency_ms=latency_ms,
         drift=drift if drift.get("out_of_bounds_count", 0) > 0 else None,
     )
+    record_score("/score", model, probability)
     return resp
 
 
@@ -407,6 +428,7 @@ def decide(
         decision=decision,
         drift=drift if drift.get("out_of_bounds_count", 0) > 0 else None,
     )
+    record_score("/decide", model, probability)
     return DecisionResponse(
         probability=prob,
         tier_letter=tier_letter,
@@ -482,6 +504,7 @@ def explain(
         latency_ms=latency_ms,
         drift=drift if drift.get("out_of_bounds_count", 0) > 0 else None,
     )
+    record_score("/explain", model, probability)
     return ExplainResponse(
         probability=round(probability, 6),
         risk_tier=risk_tier,
@@ -549,6 +572,8 @@ def score_batch(
         latency_ms=latency_ms,
         batch_size=n,
     )
+    for prob in scores_only:
+        record_score("/score/batch", model, prob)
     if format == "minimal":
         return {"scores": scores_only, "count": len(scores_only)}
     return responses
