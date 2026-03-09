@@ -261,3 +261,14 @@ def generate_and_save(
     df = gen.generate()
     df.to_csv(out_path, index=False)
     return df
+
+
+if __name__ == "__main__":
+    """Generate synthetic training data. Run from project root: python -m src.data.loaders"""
+    import sys
+    from pathlib import Path
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    df = generate_and_save()
+    print(f"Generated {len(df):,} rows -> {DATA_DIR / 'training_data.csv'}")

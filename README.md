@@ -4,6 +4,27 @@ A production-grade risk and fraud scoring engine that combines statistical and m
 
 ---
 
+## How to run
+
+From the project root (with a virtualenv activated and `pip install -r requirements.txt`):
+
+```bash
+# 1. Generate synthetic training data (optional; training can generate if missing)
+python -m src.data.loaders
+
+# 2. Train the logistic model (saves to artifacts/baseline_logistic.joblib)
+python -m src.models.train_logistic
+# Or generate data then train in one go:
+python -m src.models.train_logistic --synthetic
+
+# 3. Serve the scoring API
+uvicorn src.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Then open `http://127.0.0.1:8000/docs` for the interactive API.
+
+---
+
 ## Overview
 
 This project implements a full risk modeling pipeline:
