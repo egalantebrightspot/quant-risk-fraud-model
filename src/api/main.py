@@ -11,13 +11,24 @@ Requires artifacts/baseline_logistic.joblib (from python -m src.models.train_log
 """
 
 import json
+import time
+import uuid
 import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
+from src.api.audit import (
+    feature_drift_indicators,
+    log_request,
+    log_response,
+    log_score_audit,
+    log_error,
+)
 from src.api.model_loader import load_scoring_artifact, score_one
 from src.api.schemas import (
     DecisionResponse,
@@ -63,6 +74,77 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def audit_middleware(request: Request, call_next):
+    """Structured audit: request id, request log, latency, response log."""
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+    request.state.start_time = time.perf_counter()
+    log_request(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        query=str(request.query_params) if request.query_params else None,
+    )
+    response = await call_next(request)
+    latency_ms = (time.perf_counter() - request.state.start_time) * 1000
+    log_response(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        latency_ms=latency_ms,
+    )
+    return response
+
+
+def _log_and_return_error(
+    request: Request,
+    status_code: int,
+    error_type: str,
+    detail: Any,
+    content: dict,
+) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
+    start = getattr(request.state, "start_time", None)
+    latency_ms = (time.perf_counter() - start) * 1000 if start else None
+    log_error(
+        request_id=request_id,
+        path=request.url.path,
+        status_code=status_code,
+        error_type=error_type,
+        detail=detail,
+        latency_ms=latency_ms,
+    )
+    return JSONResponse(status_code=status_code, content=content)
+
+
+@app.exception_handler(HTTPException)
+def http_exception_handler(request: Request, exc: HTTPException):
+    """Log 4xx/5xx and return structured error."""
+    detail = str(exc.detail) if exc.detail else "No detail"
+    return _log_and_return_error(
+        request, exc.status_code, type(exc).__name__, detail, {"detail": exc.detail}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Log 422 validation errors."""
+    detail = str(exc.errors())[:500]
+    return _log_and_return_error(
+        request, 422, "RequestValidationError", detail, {"detail": exc.errors()}
+    )
+
+
+@app.exception_handler(Exception)
+def unhandled_exception_handler(request: Request, exc: Exception):
+    """Log unhandled errors (500) for audit and alerting."""
+    return _log_and_return_error(
+        request, 500, type(exc).__name__, str(exc), {"detail": "Internal server error"}
+    )
 
 
 def _artifact_for_model(app: FastAPI, model: str) -> Optional[dict[str, Any]]:
@@ -224,6 +306,7 @@ _EXAMPLE_BATCH = [_EXAMPLE_LOW_RISK, _EXAMPLE_HIGH_RISK]
 
 @app.post("/score", response_model=ScoreResponse)
 def score(
+    http_request: Request,
     request: ScoreRequest = Body(
         ...,
         examples=[
@@ -251,12 +334,27 @@ def score(
             detail="Model not loaded. Run training and ensure artifact exists.",
         )
     feature_row = request.to_feature_row()
+    t0 = time.perf_counter()
     probability = score_one(artifact, feature_row, use_calibration=True)
-    return _build_response(probability, request, artifact, feature_row, include_shap)
+    resp = _build_response(probability, request, artifact, feature_row, include_shap)
+    latency_ms = (time.perf_counter() - t0) * 1000
+    drift = feature_drift_indicators(feature_row)
+    log_score_audit(
+        request_id=getattr(http_request.state, "request_id", ""),
+        endpoint="/score",
+        model=model,
+        probability=probability,
+        risk_tier=resp.risk_tier,
+        risk_tier_letter=resp.risk_tier_letter,
+        latency_ms=latency_ms,
+        drift=drift if drift.get("out_of_bounds_count", 0) > 0 else None,
+    )
+    return resp
 
 
 @app.post("/decide", response_model=DecisionResponse)
 def decide(
+    http_request: Request,
     request: ScoreRequest = Body(
         ...,
         examples=[
@@ -293,6 +391,22 @@ def decide(
     decision = probability_to_decision(probability, approve_below=approve_below, decline_above=decline_above)
     fraud_flag = 1 if probability >= 0.5 else 0
     summary = decision_summary(decision, fraud_risk_level, tier_letter)
+    t0 = time.perf_counter()
+    t0 = getattr(http_request.state, "start_time", time.perf_counter())
+    latency_ms = (time.perf_counter() - t0) * 1000
+    feature_row = request.to_feature_row()
+    drift = feature_drift_indicators(feature_row)
+    log_score_audit(
+        request_id=getattr(http_request.state, "request_id", ""),
+        endpoint="/decide",
+        model=model,
+        probability=probability,
+        risk_tier=risk_tier,
+        risk_tier_letter=tier_letter,
+        latency_ms=latency_ms,
+        decision=decision,
+        drift=drift if drift.get("out_of_bounds_count", 0) > 0 else None,
+    )
     return DecisionResponse(
         probability=prob,
         tier_letter=tier_letter,
@@ -306,6 +420,7 @@ def decide(
 
 @app.post("/explain", response_model=ExplainResponse)
 def explain(
+    http_request: Request,
     request: ScoreRequest = Body(
         ...,
         examples=[
@@ -354,6 +469,19 @@ def explain(
         )
         reason_codes_list = [ReasonCode(**r) for r in raw_codes]
 
+    t0 = getattr(http_request.state, "start_time", time.perf_counter())
+    latency_ms = (time.perf_counter() - t0) * 1000
+    drift = feature_drift_indicators(feature_row)
+    log_score_audit(
+        request_id=getattr(http_request.state, "request_id", ""),
+        endpoint="/explain",
+        model=model,
+        probability=probability,
+        risk_tier=risk_tier,
+        risk_tier_letter=risk_tier_letter,
+        latency_ms=latency_ms,
+        drift=drift if drift.get("out_of_bounds_count", 0) > 0 else None,
+    )
     return ExplainResponse(
         probability=round(probability, 6),
         risk_tier=risk_tier,
@@ -367,6 +495,7 @@ def explain(
 
 @app.post("/score/batch")
 def score_batch(
+    http_request: Request,
     requests: list[ScoreRequest] = Body(
         ...,
         examples=[
@@ -395,6 +524,7 @@ def score_batch(
         raise HTTPException(status_code=503, detail="Model not loaded. Run training first.")
     responses = []
     scores_only = []
+    t0 = time.perf_counter()
     for req in requests:
         feature_row = req.to_feature_row()
         probability = score_one(artifact, feature_row, use_calibration=True)
@@ -404,6 +534,21 @@ def score_batch(
             responses.append(
                 _build_response(probability, req, artifact, feature_row, include_shap)
             )
+    latency_ms = (time.perf_counter() - t0) * 1000
+    n = len(requests)
+    prob_audit = scores_only[0] if scores_only else 0.0
+    risk_audit = responses[0].risk_tier_letter if responses else "n/a"
+    risk_tier_audit = responses[0].risk_tier if responses else "n/a"
+    log_score_audit(
+        request_id=getattr(http_request.state, "request_id", ""),
+        endpoint="/score/batch",
+        model=model,
+        probability=prob_audit,
+        risk_tier=risk_tier_audit,
+        risk_tier_letter=risk_audit,
+        latency_ms=latency_ms,
+        batch_size=n,
+    )
     if format == "minimal":
         return {"scores": scores_only, "count": len(scores_only)}
     return responses
