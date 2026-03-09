@@ -23,6 +23,18 @@ uvicorn src.api.main:app --reload --host 127.0.0.1 --port 8000
 
 Then open `http://127.0.0.1:8000/docs` for the interactive API.
 
+**Model info:** `GET /model_info?model=logistic` returns model version, AUC, training date, feature list, and calibration status (for governance and monitoring).
+
+---
+
+## ROC curve (example)
+
+Evaluation from the modeling pipeline (notebooks and training scripts produce similar plots):
+
+![ROC curve example](docs/roc_example.png)
+
+*To regenerate: `python scripts/generate_readme_roc.py`*
+
 ---
 
 ## Overview
