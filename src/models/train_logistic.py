@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Union, cast
 
@@ -32,6 +33,7 @@ from src.config import (
     VALIDATION_SIZE,
     CALIBRATION_METHOD,
     DATA_DIR,
+    MODEL_VERSION,
 )
 from src.data.loaders import load_csv
 from src.data.preprocessing import train_test_split_data, scale_features
@@ -142,10 +144,14 @@ def run_training(
 
     metrics_path = output_path.with_suffix(".metrics.json")
     metrics = {
+        "model_version": MODEL_VERSION,
+        "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "auc_uncalibrated": summary_uncal["auc"],
         "ks_uncalibrated": summary_uncal["ks"],
         "auc_calibrated": summary_cal["auc"],
         "ks_calibrated": summary_cal["ks"],
+        "auc": summary_cal["auc"],
+        "ks": summary_cal["ks"],
     }
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)

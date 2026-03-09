@@ -27,3 +27,6 @@ LOGISTIC_SOLVER = "lbfgs"
 
 # Calibration
 CALIBRATION_METHOD = "isotonic"  # "isotonic" or "sigmoid" (Platt)
+
+# Model metadata (governance / model_info endpoint)
+MODEL_VERSION = "1.0"

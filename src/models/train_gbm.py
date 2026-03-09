@@ -9,16 +9,18 @@ Uses the same data schema as the logistic pipeline. Run from project root:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 import pandas as pd
-from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 
-from src.config import DATA_DIR, GBM_MODEL_PATH, RANDOM_STATE
+from src.config import DATA_DIR, GBM_MODEL_PATH, MODEL_VERSION, RANDOM_STATE
 from src.data.schema import CORE_FEATURES, TARGET_FRAUD
+from src.evaluation.metrics import compute_auc_ks
 from src.models.gbm import GBMRiskModel
 
 
@@ -50,6 +52,15 @@ def train_gbm(
     auc = roc_auc_score(y_test, probs)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     model.save(output_path)
+    metrics_path = output_path.with_suffix(".metrics.json")
+    metrics = {
+        "model_version": MODEL_VERSION,
+        "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "auc": float(auc),
+        "ks": None,
+    }
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2)
     print(f"GBM AUC: {auc:.4f}")
     print(f"Saved to {output_path}")
     return float(auc)
