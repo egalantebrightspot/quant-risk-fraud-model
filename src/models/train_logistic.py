@@ -35,7 +35,7 @@ from src.config import (
     DATA_DIR,
     MODEL_VERSION,
 )
-from src.data.loaders import load_csv
+from src.data.loaders import load_csv, generate_and_save
 from src.data.preprocessing import train_test_split_data, scale_features
 from src.data.schema import TARGET_FRAUD
 from src.models.logistic import LogisticRiskModel
@@ -166,7 +166,7 @@ def run_training(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train baseline logistic risk model from dataset (e.g. synthetic CSV)."
+        description="Train baseline logistic risk model. Full loop: (synthetic) data → train → artifact → API.",
     )
     parser.add_argument(
         "--data",
@@ -184,7 +184,7 @@ def main() -> None:
         "--output",
         type=Path,
         default=DEFAULT_MODEL_PATH,
-        help=f"Output path for model artifact (default: {DEFAULT_MODEL_PATH})",
+        help=f"Output path for model artifact (default: {DEFAULT_MODEL_PATH}) — API loads this.",
     )
     parser.add_argument(
         "--calibration",
@@ -196,21 +196,52 @@ def main() -> None:
     parser.add_argument(
         "--simple",
         action="store_true",
-        help="Use simple train_logistic_model() flow (no scaling/calibration, model.save).",
+        help="Use simple train_logistic_model() flow; saves to logistic_model.joblib (API uses baseline_logistic.joblib by default).",
+    )
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Generate synthetic training data if CSV is missing (or always with --synthetic-only).",
+    )
+    parser.add_argument(
+        "--synthetic-n",
+        type=int,
+        default=50_000,
+        help="Number of samples when generating synthetic data (default: 50000).",
+    )
+    parser.add_argument(
+        "--synthetic-only",
+        action="store_true",
+        help="Only generate synthetic CSV and exit (no training).",
     )
     args = parser.parse_args()
 
+    data_path = Path(args.data)
+    if args.synthetic_only:
+        print(f"Generating {args.synthetic_n} synthetic samples -> {data_path}")
+        generate_and_save(path=data_path, n=args.synthetic_n, random_state=RANDOM_STATE)
+        print("Done. Run without --synthetic-only to train.")
+        return
+
+    if args.synthetic or not data_path.exists():
+        if not data_path.exists():
+            print(f"Data not found at {data_path}. Generating {args.synthetic_n} synthetic samples...")
+        else:
+            print(f"Generating {args.synthetic_n} synthetic samples -> {data_path}")
+        generate_and_save(path=data_path, n=args.synthetic_n, random_state=RANDOM_STATE)
+
     if args.simple:
         train_logistic_model(
-            data_path=args.data,
+            data_path=data_path,
             model_path=LOGISTIC_MODEL_PATH,
             test_size=0.2,
             random_state=RANDOM_STATE,
         )
+        print(f"Saved to {LOGISTIC_MODEL_PATH}. For API, use full pipeline (no --simple) so artifact is {DEFAULT_MODEL_PATH}.")
         return
 
     result = run_training(
-        data_path=args.data,
+        data_path=data_path,
         target_column=args.target,
         output_path=args.output,
         calibration_method=args.calibration,
@@ -219,7 +250,7 @@ def main() -> None:
     summary_uncal = result["summary_uncal"]
     summary_cal = result["summary_cal"]
 
-    print(f"Loaded data from {args.data}")
+    print(f"Loaded data from {data_path}")
     print("Fitted LogisticRiskModel + calibration")
     print("\n--- Test set (uncalibrated) ---")
     print(f"  AUC: {summary_uncal['auc']:.4f}  KS: {summary_uncal['ks']:.4f}")
@@ -231,6 +262,9 @@ def main() -> None:
     print(f"  Accuracy: {summary_cal['accuracy']:.4f}  F1: {summary_cal['f1']:.4f}")
     print(f"\nSaved artifact to {result['artifact_path']}")
     print(f"Saved metrics to {result['metrics_path']}")
+    print("\n--- Training -> artifact -> API loop ---")
+    print(f"  The API (src.api.main) loads: {DEFAULT_MODEL_PATH}")
+    print("  Restart the API (or reload) to score with this model.")
 
 
 if __name__ == "__main__":

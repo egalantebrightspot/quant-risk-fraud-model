@@ -1,6 +1,10 @@
 {
-  "auc_uncalibrated": 0.5608465608465608,
-  "ks_uncalibrated": 0.29453262786596124,
-  "auc_calibrated": 0.548206937095826,
-  "ks_calibrated": 0.29041740152851264
+  "model_version": "1.0",
+  "trained_at": "2026-03-09T01:35:33Z",
+  "auc_uncalibrated": 0.675313013136289,
+  "ks_uncalibrated": 0.3339490968801314,
+  "auc_calibrated": 0.6222162356321839,
+  "ks_calibrated": 0.22028940886699505,
+  "auc": 0.6222162356321839,
+  "ks": 0.22028940886699505
 }

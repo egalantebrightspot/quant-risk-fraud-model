@@ -53,7 +53,12 @@ from src.explainability.shap_explainer import get_feature_contributions
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model artifacts once at startup (logistic required, GBM optional)."""
+    """Load model artifacts once at startup (logistic required, GBM optional).
+
+    Training → artifact → API loop: run
+      python -m src.models.train_logistic   # or  python -m src.models.train_logistic --synthetic
+    to produce artifacts/baseline_logistic.joblib; this lifespan loads that artifact for scoring.
+    """
     app.state.artifact_error = None
     try:
         app.state.artifact = load_scoring_artifact(DEFAULT_MODEL_PATH, model_type="logistic")
